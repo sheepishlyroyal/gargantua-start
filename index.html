@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gargantua</title>
+<style>
+  :root{
+    --bg: #0a0a0c;
+    --text: #e8e4dd;
+    --muted: rgba(232, 228, 221, .45);
+    --faint: rgba(232, 228, 221, .22);
+    --accent: #ffb35c;
+    --ease: cubic-bezier(.16, 1, .3, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  canvas { display: block; position: fixed; inset: 0; touch-action: none; cursor: grab; z-index: 0; }
+  canvas.dragging { cursor: grabbing; }
+
+  .label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; line-height: 1.6; }
+  .dim { color: var(--muted); }
+
+  /* letterbox + title */
+  #barTop, #barBot { position: fixed; left: 0; right: 0; height: 9vh; background: #000; z-index: 30;
+    pointer-events: none; transform: scaleY(0); transition: transform .7s var(--ease); }
+  #barTop { top: 0; transform-origin: top; }
+  #barBot { bottom: 0; transform-origin: bottom; }
+  body.cine #barTop, body.cine #barBot { transform: scaleY(1); }
+  #cineTitle { position: fixed; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    z-index: 31; text-align: center; pointer-events: none; opacity: 0; }
+  #ctMain { font-size: clamp(34px, 7vw, 84px); font-weight: 800; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--accent); text-shadow: 0 0 80px rgba(255,179,92,.4); }
+  #ctSub { font-size: clamp(11px, 1.3vw, 14px); letter-spacing: .32em; text-transform: uppercase;
+    color: var(--muted); margin-top: 12px; }
+
+  /* hud */
+  #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    opacity: 0; transform: translateY(10px);
+    transition: opacity .8s var(--ease), transform .8s var(--ease); }
+  #hud.in { opacity: 1; transform: none; }
+  #hud > * { pointer-events: auto; }
+
+  #brand { position: fixed; top: 28px; left: 36px; pointer-events: none; }
+  #brand .label:first-child { font-weight: 600; font-size: 12px; }
+  #hint { position: fixed; bottom: 24px; left: 36px; pointer-events: none; }
+
+  #clock { font-size: clamp(60px, 9vw, 112px); font-weight: 200; letter-spacing: -0.02em;
+    line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 40px rgba(0,0,0,.6); }
+  #date { margin: 14px 0 38px; color: var(--muted); }
+
+  /* search */
+  #searchForm { display: flex; align-items: center; gap: 0; width: min(620px, 86vw);
+    background: rgba(14, 13, 16, .72); border: 1px solid rgba(232,228,221,.14);
+    border-radius: 12px; backdrop-filter: blur(14px);
+    transition: border-color .2s var(--ease), box-shadow .3s var(--ease); }
+  #searchForm:focus-within { border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 12px 60px rgba(255,179,92,.12); }
+  #engine { appearance: none; border: 0; background: transparent; color: var(--muted);
+    font: 600 10.5px/1 "Helvetica Neue", sans-serif; letter-spacing: .14em; text-transform: uppercase;
+    padding: 18px 14px 18px 20px; cursor: pointer; outline: none; }
+  #engine option { background: #141318; color: var(--text); }
+  #q { flex: 1; border: 0; background: transparent; color: var(--text);
+    font: 400 17px/1 "Helvetica Neue", sans-serif; padding: 18px 8px; outline: none; }
+  #q::placeholder { color: var(--faint); }
+  #go { border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 16px; padding: 18px 20px; transition: color .15s; }
+  #go:hover { color: var(--accent); }
+  #anon { border: 0; background: transparent; cursor: pointer; padding: 18px 6px 18px 12px;
+    font-size: 15px; color: var(--faint); transition: color .15s var(--ease);
+    border-right: 1px solid rgba(232,228,221,.10); }
+  #anon.on { color: var(--accent); text-shadow: 0 0 14px rgba(255,179,92,.5); }
+  #anon:hover { color: var(--text); }
+
+  /* quick links */
+  #links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+    margin-top: 28px; max-width: min(680px, 90vw); }
+  .lk { padding: 9px 16px; border-radius: 8px; text-decoration: none;
+    background: rgba(14, 13, 16, .6); border: 1px solid rgba(232,228,221,.10);
+    color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; backdrop-filter: blur(10px);
+    transition: all .15s var(--ease); }
+  .lk:hover { color: var(--text); border-color: var(--accent); transform: translateY(-2px); }
+  .lk.add { color: var(--faint); border-style: dashed; cursor: pointer; }
+  .lk.add:hover { color: var(--accent); }
+
+  @media (max-width: 640px){
+    #brand { left: 20px; top: 20px; }
+    #hint { left: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="barTop"></div><div id="barBot"></div>
+<div id="cineTitle"><div id="ctMain">Gargantua</div><div id="ctSub">somewhere beyond the horizon</div></div>
+
+<div id="brand">
+  <div class="label">Gargantua</div>
+  <div class="label dim">start</div>
+</div>
+
+<div id="hud">
+  <div id="clock">00:00</div>
+  <div id="date" class="label">—</div>
+  <form id="searchForm">
+    <select id="engine" title="Search engine">
+      <option value="https://www.startpage.com/sp/search?query=">Startpage</option>
+      <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+      <option value="https://www.google.com/search?q=">Google</option>
+      <option value="https://search.brave.com/search?q=">Brave</option>
+    </select>
+    <button id="anon" type="button" title="Anonymous view — route through your proxy (right-click to configure)">👁</button>
+    <input id="q" type="text" placeholder="Search the universe…" autocomplete="off" spellcheck="false">
+    <button id="go" type="submit" aria-label="Search">→</button>
+  </form>
+  <div id="links"></div>
+</div>
+
+<div id="hint" class="label dim">drag to orbit&nbsp;&nbsp;·&nbsp;&nbsp;/ to search&nbsp;&nbsp;·&nbsp;&nbsp;👁 toggles anonymous view</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ── Kerr black hole — geodesic ray tracer (Gargantua look) ───────── */
+const FRAG = /* glsl */`
+precision highp float;
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec3  uCamPos, uCamRight, uCamUp, uCamFwd;
+uniform int   uSteps;
+uniform float uRipAmp, uRipPhase, uBoost;
+
+#define SPIN 0.95
+#define DISK_IN  2.0
+#define DISK_OUT 19.0
+#define RGR 24.0
+
+float hash21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+vec3 hash33(vec3 p){ p = fract(p * vec3(.1031, .1030, .0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x),
+             mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  for(int i = 0; i < 5; i++){ v += a * vnoise(p); p = p * 2.03 + vec2(17.3, 9.1); a *= 0.5; }
+  return v;
+}
+void geoStep(inout vec3 q, inout vec3 pv, out float r, out float dl){
+  float a2 = SPIN * SPIN;
+  float w  = dot(q, q) - a2;
+  float S  = sqrt(w * w + 4.0 * a2 * q.y * q.y);
+  float r2 = 0.5 * (w + S);
+  r = sqrt(max(r2, 1e-8));
+  float P  = r2 * r2 + a2 * q.y * q.y;
+  float f  = 2.0 * r2 * r / P;
+  float iD = 1.0 / (r2 + a2);
+  vec3 k = vec3((r * q.x + SPIN * q.z) * iD, q.y / r, (r * q.z - SPIN * q.x) * iD);
+  float kp = 1.0 + dot(k, pv);
+  vec3 ay = vec3(0.0, a2 * q.y, 0.0);
+  vec3 drdq = (r2 * q + ay) / (r * S);
+  vec3 dfdq = f * (3.0 / r * drdq - (4.0 * r2 * r * drdq + 2.0 * ay) / P);
+  float u = q.x * pv.x + q.z * pv.z;
+  float v = q.z * pv.x - q.x * pv.z;
+  vec3 dkp = (u * drdq + r * vec3(pv.x, 0.0, pv.z) + SPIN * vec3(-pv.z, 0.0, pv.x)) * iD
+           - (r * u + SPIN * v) * (2.0 * r * iD * iD) * drdq
+           + vec3(0.0, pv.y / r, 0.0) - (q.y * pv.y / r2) * drdq;
+  dl = 0.11 * max(r * 0.4, 0.3);
+  pv += (0.5 * kp * kp * dfdq + f * kp * dkp) * dl;
+  float kp2 = 1.0 + dot(k, pv);
+  q += (pv - f * kp2 * k) * dl;
+}
+vec3 blackbody(float T){
+  float t = clamp(T, 1200.0, 40000.0) / 100.0;
+  float r, g, b;
+  if (t <= 66.0) r = 1.0; else r = clamp(1.2929 * pow(t - 60.0, -0.1332), 0.0, 1.0);
+  if (t <= 66.0) g = clamp(0.39008 * log(t) - 0.63184, 0.0, 1.0);
+  else           g = clamp(1.12989 * pow(t - 60.0, -0.0755), 0.0, 1.0);
+  if (t >= 66.0) b = 1.0; else if (t <= 19.0) b = 0.0;
+  else           b = clamp(0.54320 * log(t - 10.0) - 1.19625, 0.0, 1.0);
+  return vec3(r, g, b);
+}
+vec3 starfield(vec3 rd){
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 2; i++){
+    float sc = (i == 0) ? 42.0 : 95.0;
+    vec3 q = rd * sc;
+    vec3 h = hash33(floor(q));
+    float d = length(fract(q) - 0.5 - (h - 0.5) * 0.72);
+    col += smoothstep(0.10, 0.0, d) * step(0.977 + float(i) * 0.006, h.x)
+         * (0.35 + 1.3 * h.y * h.y)
+         * mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.70), h.z) * ((i == 0) ? 1.0 : 0.5);
+  }
+  float band = exp(-abs(dot(rd, normalize(vec3(0.32, 1.0, 0.18)))) * 4.5);
+  float neb = fbm(rd.xy * 4.0 + rd.z * 3.0);
+  col += band * neb * neb * vec3(0.045, 0.048, 0.095) + band * vec3(0.006, 0.007, 0.014);
+  return col;
+}
+vec3 diskColor(vec3 p, vec3 rayDir, out float alpha){
+  float r = length(p.xz);
+  float phi = atan(p.z, p.x);
+  float a1 = phi + uTime * 4.5 / (pow(r, 1.5) + SPIN);
+  float n = fbm(vec2(r * 0.85, a1 * 3.0));
+  n = 0.72 * n + 0.42 * fbm(vec2(r * 3.2 - n * 2.0, a1 * 10.0 - r * 1.1));
+  float dens = smoothstep(DISK_IN, DISK_IN + 1.5, r) * smoothstep(DISK_OUT, DISK_OUT - 7.5, r);
+  dens *= 0.25 + 1.6 * n;
+  float em = pow(max(0.0, 1.0 - sqrt(DISK_IN * 0.92 / r)), 0.8) / pow(r / DISK_IN, 3.0) * 11.0;
+  float beta = clamp(sqrt(1.0 / max(r - 1.2, 0.8)), 0.0, 0.72);
+  vec3 tang = normalize(vec3(-p.z, 0.0, p.x));
+  float gam = 1.0 / sqrt(1.0 - beta * beta);
+  float dop = 1.0 / (gam * (1.0 - beta * dot(tang, -rayDir)));
+  float grav = sqrt(max(1.0 - 2.0 / (r + 1.2), 0.0));
+  float shift = dop * grav;
+  float rip = pow(0.5 + 0.5 * sin(r * 2.6 - uRipPhase + n * 1.8), 3.0) * uRipAmp;
+  float T = 4500.0 * pow(4.9 / r, 0.75);
+  vec3 col = blackbody(T * shift * (1.0 + 0.3 * rip));
+  float I = em * dens * pow(shift, 3.0) * uBoost * (1.0 + 2.4 * rip);
+  alpha = clamp(dens * 1.5, 0.0, 1.0);
+  return col * I;
+}
+vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  vec3 rd = normalize(uCamFwd * 1.2 + uv.x * uCamRight + uv.y * uCamUp);
+  vec3 col = vec3(0.0);
+  float trans = 1.0;
+  bool captured = false, miss = false;
+  vec3 q = uCamPos, pv = rd;
+
+  float c2 = dot(q, q);
+  if (c2 > RGR * RGR){
+    float b = dot(q, rd);
+    float disc = b * b - (c2 - RGR * RGR);
+    if (b >= 0.0 || disc < 0.0) miss = true;
+    else q += rd * (-b - sqrt(disc));
+  }
+  if (!miss){
+    {
+      float a2 = SPIN * SPIN;
+      float w = dot(q, q) - a2;
+      float S = sqrt(w * w + 4.0 * a2 * q.y * q.y);
+      float r2 = 0.5 * (w + S);
+      float r0 = sqrt(max(r2, 1e-8));
+      float f = 2.0 * r2 * r0 / (r2 * r2 + a2 * q.y * q.y);
+      float iD = 1.0 / (r2 + a2);
+      vec3 k = vec3((r0 * q.x + SPIN * q.z) * iD, q.y / r0, (r0 * q.z - SPIN * q.x) * iD);
+      float kn = dot(k, rd);
+      float A2 = 1.0 - f * kn * kn;
+      pv = rd * (f * kn + sqrt(f * f * kn * kn + A2 * (1.0 + f))) / A2;
+    }
+    float rHorizon = 1.0 + sqrt(1.0 - SPIN * SPIN) + 0.02;
+    for (int i = 0; i < 450; i++){
+      if (i >= uSteps) break;
+      vec3 qp = q;
+      float r, dl;
+      geoStep(q, pv, r, dl);
+      if (r < rHorizon){ captured = true; break; }
+      if (dot(q, q) > RGR * RGR && dot(q, pv) > 0.0) break;
+      if (qp.y * q.y < 0.0){
+        float fr = qp.y / (qp.y - q.y);
+        vec3 hit = mix(qp, q, fr);
+        float rr = length(hit.xz);
+        if (rr > DISK_IN * 0.85 && rr < DISK_OUT){
+          float alpha;
+          vec3 dc = diskColor(hit, normalize(q - qp), alpha);
+          col += dc * trans;
+          trans *= (1.0 - alpha * 0.85);
+          if (trans < 0.03) break;
+        }
+      }
+    }
+  }
+  if (miss) col = starfield(rd);
+  else if (!captured && trans > 0.01) col += starfield(normalize(pv)) * trans;
+
+  col = aces(col * 0.5);
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  col = clamp(mix(vec3(luma), col, 1.22), 0.0, 1.0);
+  col = pow(col, vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const U = {
+  uRes: { value: new THREE.Vector2() }, uTime: { value: 0 },
+  uCamPos: { value: new THREE.Vector3() }, uCamRight: { value: new THREE.Vector3() },
+  uCamUp: { value: new THREE.Vector3() }, uCamFwd: { value: new THREE.Vector3() },
+  uSteps: { value: 220 }, uRipAmp: { value: 0 }, uRipPhase: { value: 0 }, uBoost: { value: 1 },
+};
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ fragmentShader: FRAG, uniforms: U })));
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.5, 0.75));
+composer.addPass(new OutputPass());
+
+let resScale = 0.7;
+const maxDPR = Math.min(devicePixelRatio || 1, 1.25);
+function applySize(){
+  renderer.setPixelRatio(maxDPR * resScale);
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setPixelRatio(maxDPR * resScale);
+  composer.setSize(innerWidth, innerHeight);
+  const s = new THREE.Vector2(); renderer.getDrawingBufferSize(s); U.uRes.value.copy(s);
+}
+applySize();
+addEventListener('resize', applySize);
+
+/* orbit + cinematic intro */
+const cam = { yaw: 2.0, pitch: 0.13, dist: 6.6 };
+const cine = { blend: 1, yawAdd: 1.4, dist: 6.6, pitch: 0.13 };
+const user = { yaw: 0, pitch: 0 };
+const fx = { ripAmp: 0, ripT: 0 };
+let dragging = false, lx = 0, ly = 0, lastInput = 0;
+const cnv = renderer.domElement;
+cnv.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY;
+  cnv.classList.add('dragging'); cnv.setPointerCapture(e.pointerId); lastInput = performance.now(); });
+cnv.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  user.yaw -= (e.clientX - lx) * 0.005;
+  user.pitch = Math.max(-1.2, Math.min(1.2, user.pitch + (e.clientY - ly) * 0.005));
+  lx = e.clientX; ly = e.clientY; lastInput = performance.now();
+});
+const endP = () => { dragging = false; cnv.classList.remove('dragging'); };
+cnv.addEventListener('pointerup', endP); cnv.addEventListener('pointercancel', endP);
+const mix = (a, b, t) => a + (b - a) * t;
+
+/* intro: born inside the shadow, pull out, reveal the hud */
+document.body.classList.add('cine');
+gsap.to(cine, { dist: 34, yawAdd: 0, duration: 4.2, ease: 'expo.out', delay: 0.4 });
+gsap.fromTo('#cineTitle', { opacity: 0, scale: 0.94 },
+  { opacity: 1, scale: 1, duration: .6, ease: 'expo.out', delay: 1.0 });
+gsap.to('#cineTitle', { opacity: 0, duration: .8, delay: 3.4, ease: 'power1.in' });
+setTimeout(() => { document.body.classList.remove('cine'); }, 3800);
+setTimeout(() => {
+  document.getElementById('hud').classList.add('in');
+  gsap.to(cine, { blend: 0, duration: 1.4, ease: 'power2.inOut' });
+}, 3000);
+
+/* ── clock ───────────────────────────────────────────────────────── */
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function tickClock(){
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  document.getElementById('date').textContent =
+    `${DAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+tickClock();
+setInterval(tickClock, 5000);
+
+/* ── search + anonymous view ─────────────────────────────────────── */
+const engineSel = document.getElementById('engine');
+engineSel.value = localStorage.getItem('gargantua-engine') || engineSel.options[0].value;
+engineSel.addEventListener('change', () => localStorage.setItem('gargantua-engine', engineSel.value));
+
+/* anonymous-view state. proxyBase = your deployed Scramjet+Wisp host.
+   Contract: open `${proxyBase}/#<full-url>` and the proxy loads it.
+   Empty until configured — right-click the eye to set it. */
+let anon = localStorage.getItem('gargantua-anon') === '1';
+let proxyBase = localStorage.getItem('gargantua-proxy') || '';
+const anonBtn = document.getElementById('anon');
+function syncAnon(){ anonBtn.classList.toggle('on', anon); }
+syncAnon();
+anonBtn.addEventListener('click', () => {
+  if (!proxyBase){ configureProxy(); if (!proxyBase) return; }
+  anon = !anon; localStorage.setItem('gargantua-anon', anon ? '1' : '0'); syncAnon();
+});
+anonBtn.addEventListener('contextmenu', e => { e.preventDefault(); configureProxy(); });
+function configureProxy(){
+  const v = prompt(
+    'Anonymous-view proxy URL (your deployed Scramjet+Wisp host, e.g. https://my-proxy.fly.dev).\n' +
+    'Leave blank to disable. See ~/gargantua-proxy to deploy your own.',
+    proxyBase);
+  if (v === null) return;
+  proxyBase = v.trim().replace(/\/+$/, '');
+  if (proxyBase && !/^https?:\/\//.test(proxyBase)) proxyBase = 'https://' + proxyBase;
+  localStorage.setItem('gargantua-proxy', proxyBase);
+  if (!proxyBase){ anon = false; localStorage.setItem('gargantua-anon', '0'); syncAnon(); }
+}
+
+const ytId = u => (u.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([\w-]{11})/) || [])[1];
+function isUrl(s){ return /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) && !s.includes(' '); }
+
+function openTarget(url){
+  /* YouTube → reliable nocookie embed via the proxy's watch page (best-effort playback) */
+  const vid = ytId(url);
+  if (anon && proxyBase && vid){ location.href = `${proxyBase}/watch.html?v=${vid}`; return; }
+  /* anonymous view → through the proxy */
+  if (anon && proxyBase){ location.href = `${proxyBase}/#${url}`; return; }
+  if (anon && !proxyBase){ configureProxy(); if (!(anon && proxyBase)) { location.href = url; return; } location.href = `${proxyBase}/#${url}`; return; }
+  location.href = url;
+}
+
+document.getElementById('searchForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  fx.ripAmp = 1;
+  setTimeout(() => {
+    const bare = q.replace(/^https?:\/\//, '');
+    if (isUrl(bare)){ openTarget('https://' + bare); return; }
+    const searchUrl = engineSel.value + encodeURIComponent(q);
+    /* searches go direct (engines are rarely the block target & they captcha hard through proxies) */
+    if (anon && proxyBase){ location.href = `${proxyBase}/#${searchUrl}`; }
+    else location.href = searchUrl;
+  }, 250);
+});
+const qInput = document.getElementById('q');
+qInput.addEventListener('focus', () => fx.ripAmp = 0.45);
+qInput.addEventListener('blur', () => fx.ripAmp = 0);
+addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== qInput){ e.preventDefault(); qInput.focus(); }
+});
+
+/* ── quick links (localStorage, right-click to remove) ───────────── */
+const DEFAULT_LINKS = [
+  { n: 'Gmail', u: 'https://mail.google.com' },
+  { n: 'YouTube', u: 'https://youtube.com' },
+  { n: 'GitHub', u: 'https://github.com' },
+  { n: 'Reddit', u: 'https://reddit.com' },
+  { n: 'Maps', u: 'https://maps.google.com' },
+  { n: 'Drive', u: 'https://drive.google.com' },
+];
+let links = (() => { try { return JSON.parse(localStorage.getItem('gargantua-links')) || DEFAULT_LINKS; }
+  catch { return DEFAULT_LINKS; } })();
+function saveLinks(){ localStorage.setItem('gargantua-links', JSON.stringify(links)); }
+function renderLinks(){
+  const el = document.getElementById('links');
+  el.innerHTML = links.map((l, i) =>
+    `<a class="lk" href="${l.u}" data-i="${i}">${l.n}</a>`).join('') +
+    `<span class="lk add" id="addLink">+ add</span>`;
+  el.querySelectorAll('a.lk').forEach(a => {
+    a.addEventListener('click', ev => {       /* route through anon view when enabled */
+      if (anon && proxyBase){ ev.preventDefault(); openTarget(links[+a.dataset.i].u); }
+    });
+    a.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const i = +a.dataset.i;
+      if (confirm(`Remove ${links[i].n}?`)){ links.splice(i, 1); saveLinks(); renderLinks(); }
+    });
+  });
+  document.getElementById('addLink').addEventListener('click', () => {
+    const n = prompt('Link name:'); if (!n) return;
+    let u = prompt('URL:'); if (!u) return;
+    if (!/^https?:\/\//.test(u)) u = 'https://' + u;
+    links.push({ n: n.trim(), u: u.trim() }); saveLinks(); renderLinks();
+  });
+}
+renderLinks();
+
+/* ── frame loop ──────────────────────────────────────────────────── */
+const clock = new THREE.Clock();
+let fpsAcc = 0, fpsN = 0, fpsT = 0, ripCur = 0;
+function frame(){
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  U.uTime.value += dt;
+
+  ripCur += (fx.ripAmp - ripCur) * (1 - Math.pow(0.02, dt));
+  U.uRipAmp.value = ripCur;
+  U.uRipPhase.value += dt * (0.6 + 4.0 * ripCur);
+  U.uBoost.value = 1 + ripCur * 0.3;
+  if (fx.ripAmp === 1) fx.ripAmp = 0;   /* search-submit pulse decays */
+
+  if (!dragging && performance.now() - lastInput > 5000) user.yaw += dt * 0.025;
+  const tYaw = 0.6 + user.yaw + cine.yawAdd;
+  const tPitch = mix(Math.max(-1.4, Math.min(1.4, 0.13 + user.pitch)), cine.pitch, cine.blend);
+  const tDist = mix(34, cine.dist, cine.blend);
+  const kc = 1 - Math.pow(0.0001, dt);
+  cam.yaw += (tYaw - cam.yaw) * kc;
+  cam.pitch += (tPitch - cam.pitch) * kc;
+  cam.dist += (tDist - cam.dist) * kc;
+  const cp = new THREE.Vector3(
+    Math.cos(cam.pitch) * Math.sin(cam.yaw), Math.sin(cam.pitch),
+    Math.cos(cam.pitch) * Math.cos(cam.yaw)).multiplyScalar(cam.dist);
+  const fwd = cp.clone().negate().normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  U.uCamPos.value.copy(cp); U.uCamFwd.value.copy(fwd); U.uCamRight.value.copy(right);
+  U.uCamUp.value.crossVectors(right, fwd);
+
+  composer.render();
+
+  fpsAcc += dt; fpsN++;
+  if ((fpsT += dt) > 0.8 && fpsN > 8){
+    const avg = fpsAcc / fpsN;
+    if (avg > 0.022){
+      if (resScale > 0.3){ resScale = Math.max(0.3, resScale - 0.2); applySize(); }
+      else if (U.uSteps.value > 150) U.uSteps.value = 150;
+    } else if (avg < 0.012){
+      if (U.uSteps.value < 220) U.uSteps.value = 220;
+      else if (resScale < 1.0){ resScale = Math.min(1.0, resScale + 0.1); applySize(); }
+    }
+    fpsAcc = 0; fpsN = 0; fpsT = 0;
+  }
+}
+frame();
+</script>
+</body>
+</html>
