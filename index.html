@@ -18,6 +18,12 @@
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
   canvas { display: block; position: fixed; inset: 0; touch-action: none; cursor: grab; z-index: 0; }
   canvas.dragging { cursor: grabbing; }
+  /* static black-hole backdrop when WebGL is unavailable — never a blank screen */
+  body.no-webgl { background:
+      radial-gradient(closest-side at 50% 45%, transparent 0 13%,
+        rgba(255,179,92,.18) 14% 22%, rgba(255,140,70,.06) 33%, transparent 56%),
+      radial-gradient(closest-side at 50% 45%, #000 0 12%, transparent 13%),
+      var(--bg); }
 
   .label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; line-height: 1.6; }
   .dim { color: var(--muted); }
@@ -128,21 +134,17 @@
 
 <div id="hint" class="label dim">drag to orbit&nbsp;&nbsp;·&nbsp;&nbsp;/ to search&nbsp;&nbsp;·&nbsp;&nbsp;👁 toggles anonymous view</div>
 
-<!-- Three.js is vendored locally (./vendor) so NO third-party CDN is needed —
-     works even where cdnjs / jsdelivr are blocked by the network filter. -->
-<script type="importmap">
-{ "imports": {
-  "three": "./vendor/three.module.js"
-} }
-</script>
-
+<!-- Three.js is vendored locally and imported by RELATIVE PATH (no import map) —
+     import maps need a 2021+ browser and managed/locked devices often lack them.
+     A direct relative import works in any browser with ES modules (2017+). -->
 <script type="module">
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.js';
 THREE.ColorManagement.enabled = false;   /* shader does its own gamma/ACES */
 
 /* ── Kerr black hole — geodesic ray tracer (Gargantua look) ───────── */
 const FRAG = /* glsl */`
 precision highp float;
+precision highp int;
 uniform vec2  uRes;
 uniform float uTime;
 uniform vec3  uCamPos, uCamRight, uCamUp, uCamFwd;
@@ -303,9 +305,30 @@ void main(){
 }
 `;
 
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-renderer.setSize(innerWidth, innerHeight);
-document.body.prepend(renderer.domElement);
+/* WebGL is optional: if the context can't be made OR the heavy shader fails to
+   compile on this GPU/driver, fall back to a static CSS black-hole backdrop and
+   reveal the HUD — never a blank black screen. */
+let renderer = null, glOK = false;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  glOK = !!(renderer && renderer.getContext());
+} catch (e) { glOK = false; }
+
+function fallbackToCSS(){
+  glOK = false;
+  try { if (renderer && renderer.domElement && renderer.domElement.parentNode) renderer.domElement.remove(); } catch (_) {}
+  document.body.classList.add('no-webgl');
+  document.body.classList.remove('cine');
+  const hud = document.getElementById('hud'); if (hud) hud.classList.add('in');
+}
+
+if (glOK) {
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.debug.onShaderError = () => fallbackToCSS();   // shader rejected by driver → degrade
+  document.body.prepend(renderer.domElement);
+} else {
+  fallbackToCSS();
+}
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const U = {
@@ -319,6 +342,7 @@ scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial
 let resScale = 0.7;
 const maxDPR = Math.min(devicePixelRatio || 1, 1.25);
 function applySize(){
+  if (!glOK) return;
   renderer.setPixelRatio(maxDPR * resScale);
   renderer.setSize(innerWidth, innerHeight);
   const s = new THREE.Vector2(); renderer.getDrawingBufferSize(s); U.uRes.value.copy(s);
@@ -332,27 +356,29 @@ const cine = { blend: 1, yawAdd: 1.4, dist: 6.6, pitch: 0.13 };
 const user = { yaw: 0, pitch: 0 };
 const fx = { ripAmp: 0, ripT: 0 };
 let dragging = false, lx = 0, ly = 0, lastInput = 0;
-const cnv = renderer.domElement;
-cnv.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY;
-  cnv.classList.add('dragging'); cnv.setPointerCapture(e.pointerId); lastInput = performance.now(); });
-cnv.addEventListener('pointermove', e => {
-  if (!dragging) return;
-  user.yaw -= (e.clientX - lx) * 0.005;
-  user.pitch = Math.max(-1.2, Math.min(1.2, user.pitch + (e.clientY - ly) * 0.005));
-  lx = e.clientX; ly = e.clientY; lastInput = performance.now();
-});
-const endP = () => { dragging = false; cnv.classList.remove('dragging'); };
-cnv.addEventListener('pointerup', endP); cnv.addEventListener('pointercancel', endP);
 const mix = (a, b, t) => a + (b - a) * t;
-
-/* intro: born inside the shadow, pull out, reveal the hud.
-   Driven in the frame loop with plain JS (no GSAP) so a blocked CDN can never
-   leave the camera stranded inside the shadow. Title fade is pure CSS. */
-document.body.classList.add('cine');
-document.getElementById('cineTitle').classList.add('show');
 const introStart = performance.now();
-setTimeout(() => { document.body.classList.remove('cine'); }, 3800);
-setTimeout(() => { document.getElementById('hud').classList.add('in'); }, 3000);
+
+if (glOK) {
+  const cnv = renderer.domElement;
+  cnv.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY;
+    cnv.classList.add('dragging'); cnv.setPointerCapture(e.pointerId); lastInput = performance.now(); });
+  cnv.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    user.yaw -= (e.clientX - lx) * 0.005;
+    user.pitch = Math.max(-1.2, Math.min(1.2, user.pitch + (e.clientY - ly) * 0.005));
+    lx = e.clientX; ly = e.clientY; lastInput = performance.now();
+  });
+  const endP = () => { dragging = false; cnv.classList.remove('dragging'); };
+  cnv.addEventListener('pointerup', endP); cnv.addEventListener('pointercancel', endP);
+
+  /* intro: born inside the shadow, pull out, reveal the hud — plain JS / CSS,
+     no GSAP, so a blocked CDN can never strand the camera inside the shadow. */
+  document.body.classList.add('cine');
+  document.getElementById('cineTitle').classList.add('show');
+  setTimeout(() => { document.body.classList.remove('cine'); }, 3800);
+  setTimeout(() => { document.getElementById('hud').classList.add('in'); }, 3000);
+}
 
 /* ── clock ───────────────────────────────────────────────────────── */
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -471,6 +497,7 @@ renderLinks();
 const clock = new THREE.Clock();
 let fpsAcc = 0, fpsN = 0, fpsT = 0, ripCur = 0;
 function frame(){
+  if (!glOK) return;          // WebGL/shader unavailable → CSS backdrop is showing instead
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
   U.uTime.value += dt;
