@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gargantua</title>
+<title>Lintoria</title>
 <style>
   :root{
     --bg: #0a0a0c;
@@ -108,10 +108,10 @@
 <body>
 
 <div id="barTop"></div><div id="barBot"></div>
-<div id="cineTitle"><div id="ctMain">Gargantua</div><div id="ctSub">somewhere beyond the horizon</div></div>
+<div id="cineTitle"><div id="ctMain">Lintoria</div><div id="ctSub">somewhere beyond the horizon</div></div>
 
 <div id="brand">
-  <div class="label">Gargantua</div>
+  <div class="label">Lintoria</div>
   <div class="label dim">start</div>
 </div>
 
@@ -402,7 +402,7 @@ engineSel.addEventListener('change', () => localStorage.setItem('gargantua-engin
    Contract: open `${proxyBase}/#<full-url>` and the proxy loads it.
    Empty until configured — right-click the eye to set it. */
 let anon = localStorage.getItem('gargantua-anon') === '1';
-let proxyBase = localStorage.getItem('gargantua-proxy') || '';
+let proxyBase = localStorage.getItem('gargantua-proxy') || 'https://proxy.lintoria.com';
 const anonBtn = document.getElementById('anon');
 function syncAnon(){ anonBtn.classList.toggle('on', anon); }
 syncAnon();
@@ -415,7 +415,7 @@ anonBtn.addEventListener('click', () => {
 anonBtn.addEventListener('contextmenu', e => { e.preventDefault(); configureProxy(); });
 function configureProxy(){
   const v = prompt(
-    'Full-site proxy URL — your deployed gargantua-proxy on Render, e.g. https://study-portal.onrender.com.\n' +
+    'Full-site proxy URL — your proxy host, e.g. https://proxy.lintoria.com.\n' +
     'Only needed to browse non-YouTube blocked sites. Leave blank to skip (YouTube still works via watch.html).',
     proxyBase);
   if (v === null) return;
