@@ -14,7 +14,8 @@
     --ease: cubic-bezier(.16, 1, .3, 1);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  html { background: var(--bg); }
+  body { min-height: 100%; background: var(--bg); color: var(--text); overflow-x: hidden;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
   canvas { display: block; position: fixed; inset: 0; touch-action: none; cursor: grab; z-index: 0; }
   canvas.dragging { cursor: grabbing; }
@@ -48,21 +49,36 @@
   #ctSub { font-size: clamp(11px, 1.3vw, 14px); letter-spacing: .32em; text-transform: uppercase;
     color: var(--muted); margin-top: 12px; }
 
-  /* hud */
-  #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    opacity: 0; transform: translateY(10px);
-    transition: opacity .8s var(--ease), transform .8s var(--ease); }
-  #hud.in { opacity: 1; transform: none; }
-  #hud > * { pointer-events: auto; }
-
-  #brand { position: fixed; top: 28px; left: 36px; pointer-events: none; }
+  /* fixed corner brand */
+  #brand { position: fixed; top: 26px; left: 34px; z-index: 12; pointer-events: none; }
   #brand .label:first-child { font-weight: 600; font-size: 12px; }
-  #hint { position: fixed; bottom: 24px; left: 36px; pointer-events: none; }
 
-  #clock { font-size: clamp(60px, 9vw, 112px); font-weight: 200; letter-spacing: -0.02em;
-    line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 40px rgba(0,0,0,.6); }
-  #date { margin: 14px 0 38px; color: var(--muted); }
+  /* hero — sits over the live black hole */
+  #hero { position: relative; z-index: 1; min-height: 100vh; display: flex; align-items: flex-end;
+    padding: 0 8vw 12vh; }
+  #hero .hero-inner { max-width: 720px; }
+  #hero h1 { font-size: clamp(2.4rem, 7vw, 5.5rem); font-weight: 200; letter-spacing: -0.02em;
+    line-height: 1.02; margin: 14px 0 18px; }
+  #hero p { color: var(--muted); font-size: clamp(14px, 1.6vw, 17px); line-height: 1.6; max-width: 52ch; }
+  .scroll-cue { margin-top: 30px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase;
+    color: var(--faint); animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{ transform: translateY(0); opacity:.5 } 50%{ transform: translateY(5px); opacity:1 } }
+
+  /* the cover: real physics on an opaque surface that scrolls up over the hole */
+  #doc { position: relative; z-index: 1; background: var(--bg); }
+  .chapter { max-width: 70ch; margin: 0 auto; padding: 7vh 28px;
+    border-top: 1px solid rgba(232,228,221,.08); }
+  .chapter .kicker { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+  .chapter h2 { font-size: clamp(1.7rem, 3.5vw, 2.6rem); font-weight: 300; letter-spacing: -0.01em;
+    margin: 12px 0 18px; line-height: 1.12; }
+  .chapter p { color: rgba(232,228,221,.74); font-size: 16px; line-height: 1.7; margin: 0 0 16px; max-width: 66ch; }
+  .chapter p .term { color: var(--text); font-weight: 500; }
+
+  /* footer = the tools, framed as an archive search */
+  #foot { position: relative; z-index: 1; background: var(--bg); border-top: 1px solid rgba(232,228,221,.1);
+    padding: 9vh 28px 7vh; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+  #foot .foot-k { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  #foot .copyright { color: var(--faint); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-top: 22px; }
 
   /* search */
   #searchForm { display: flex; align-items: center; gap: 0; width: min(620px, 86vw);
@@ -100,8 +116,8 @@
   .lk.add:hover { color: var(--accent); }
 
   @media (max-width: 640px){
-    #brand { left: 20px; top: 20px; }
-    #hint { left: 20px; }
+    #brand { left: 18px; top: 18px; }
+    #hero { padding: 0 24px 14vh; }
   }
 </style>
 </head>
@@ -111,28 +127,77 @@
 <div id="cineTitle"><div id="ctMain">Lintoria</div><div id="ctSub">somewhere beyond the horizon</div></div>
 
 <div id="brand">
-  <div class="label">Lintoria</div>
-  <div class="label dim">start</div>
+  <div class="label">Singularity</div>
+  <div class="label dim">field notes on black holes</div>
 </div>
 
-<div id="hud">
-  <div id="clock">00:00</div>
-  <div id="date" class="label">—</div>
+<!-- HERO over the live render -->
+<header id="hero">
+  <div class="hero-inner">
+    <div class="label dim">Relativistic astrophysics · interactive</div>
+    <h1>Anatomy of a&nbsp;Black&nbsp;Hole</h1>
+    <p>A real-time, general-relativistic render of a rotating (Kerr) black hole — and a plain-language guide to the physics that shapes what you see. Drag to orbit. Scroll to read.</p>
+    <div class="scroll-cue">scroll ↓</div>
+  </div>
+</header>
+
+<!-- THE COVER: genuine physics content -->
+<main id="doc">
+  <article class="chapter">
+    <div class="kicker">01 / point of no return</div>
+    <h2>The event horizon</h2>
+    <p>A black hole is a region where gravity is so strong that nothing — not even light — can escape. Its boundary is the <span class="term">event horizon</span>: a one-way surface. Cross it and every possible path leads further in, toward the central singularity.</p>
+    <p>The horizon's size is set entirely by mass. For a non-rotating hole the <span class="term">Schwarzschild radius</span> is about 3&nbsp;km per solar mass — so a hole the mass of the Sun would be a sphere just 6&nbsp;km across, yet utterly black.</p>
+  </article>
+  <article class="chapter">
+    <div class="kicker">02 / frame dragging</div>
+    <h2>A spinning spacetime</h2>
+    <p>Real black holes spin, often near the theoretical limit. A rotating hole is described by the <span class="term">Kerr metric</span>, and its spin literally drags spacetime around with it — an effect called <span class="term">frame dragging</span>. Inside the <span class="term">ergosphere</span>, you cannot stay still even at light speed; you are swept along with the rotation.</p>
+    <p>Spin reshapes everything you see: the shadow becomes slightly asymmetric (a "D" shape), and matter can orbit far closer before falling in — the innermost stable orbit shrinks from 6 down to nearly 1 gravitational radius for a maximally spinning hole.</p>
+  </article>
+  <article class="chapter">
+    <div class="kicker">03 / infalling matter</div>
+    <h2>The accretion disk</h2>
+    <p>Gas captured by a black hole rarely falls straight in. It settles into a flat, fast-rotating <span class="term">accretion disk</span>, where friction and magnetic stress heat it to millions of degrees, making it blaze in ultraviolet and X-rays — often outshining entire galaxies.</p>
+    <p>The disk rotates differentially: inner gas orbits far faster than outer gas. The side spinning toward us is beamed brighter and blue-shifted by its near-light-speed motion — the <span class="term">relativistic Doppler</span> effect that makes one side of the ring look hotter.</p>
+  </article>
+  <article class="chapter">
+    <div class="kicker">04 / bent light</div>
+    <h2>Gravitational lensing</h2>
+    <p>Mass curves spacetime, and light follows that curvature along paths called <span class="term">geodesics</span>. Near a black hole the bending is extreme: the far side of the accretion disk is lifted into view <em>over the top</em> of the shadow, and the underside wraps below it. You see the disk's front, back, top and bottom at once.</p>
+    <p>This is why a black hole looks like a halo wrapped around a dark sphere rather than a flat ring — the image you perceive is light that has been bent through tens of degrees on its way to your eye.</p>
+  </article>
+  <article class="chapter">
+    <div class="kicker">05 / where light orbits</div>
+    <h2>The photon sphere</h2>
+    <p>At 1.5 times the Schwarzschild radius lies the <span class="term">photon sphere</span>, where gravity is just strong enough to bend light into a circular orbit. Photons here can loop the hole once, twice, or many times before escaping.</p>
+    <p>That looping light piles up into the thin, brilliant <span class="term">photon ring</span> outlining the shadow — the sharpest, most universal feature of any black-hole image, and the one the Event Horizon Telescope resolved for M87* in 2019.</p>
+  </article>
+  <article class="chapter">
+    <div class="kicker">06 / the long goodbye</div>
+    <h2>Hawking radiation</h2>
+    <p>Black holes are not perfectly black. Quantum effects at the horizon let them emit a faint thermal glow — <span class="term">Hawking radiation</span> — carrying energy slowly away. Over time, a black hole evaporates.</p>
+    <p>The timescale is staggering: a stellar-mass hole would take far longer than the current age of the universe to disappear. But in the deep future, evaporation is how every black hole eventually ends.</p>
+  </article>
+</main>
+
+<!-- FOOTER: the tools, framed as an archive search -->
+<footer id="foot">
+  <div class="foot-k">Search the archive</div>
   <form id="searchForm">
-    <select id="engine" title="Search engine">
+    <select id="engine" title="Source">
       <option value="https://www.startpage.com/sp/search?query=">Startpage</option>
       <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
       <option value="https://www.google.com/search?q=">Google</option>
       <option value="https://search.brave.com/search?q=">Brave</option>
     </select>
-    <button id="anon" type="button" title="Anonymous view — route through your proxy (right-click to configure)">👁</button>
-    <input id="q" type="text" placeholder="Search the universe…" autocomplete="off" spellcheck="false">
+    <button id="anon" type="button" title="Private view">⌖</button>
+    <input id="q" type="text" placeholder="Search topics, or open a link…" autocomplete="off" spellcheck="false">
     <button id="go" type="submit" aria-label="Search">→</button>
   </form>
   <div id="links"></div>
-</div>
-
-<div id="hint" class="label dim">drag to orbit&nbsp;&nbsp;·&nbsp;&nbsp;/ to search&nbsp;&nbsp;·&nbsp;&nbsp;👁 toggles anonymous view</div>
+  <div class="copyright">© Singularity · for educational use</div>
+</footer>
 
 <!-- Three.js is vendored locally and imported by RELATIVE PATH (no import map) —
      import maps need a 2021+ browser and managed/locked devices often lack them.
@@ -374,24 +439,13 @@ if (glOK) {
 
   /* intro: born inside the shadow, pull out, reveal the hud — plain JS / CSS,
      no GSAP, so a blocked CDN can never strand the camera inside the shadow. */
-  document.body.classList.add('cine');
-  document.getElementById('cineTitle').classList.add('show');
-  setTimeout(() => { document.body.classList.remove('cine'); }, 3800);
-  setTimeout(() => { document.getElementById('hud').classList.add('in'); }, 3000);
+  /* intro plays over the hero; only run it if the page loads at the top */
+  if (scrollY < 40){
+    document.body.classList.add('cine');
+    document.getElementById('cineTitle').classList.add('show');
+    setTimeout(() => { document.body.classList.remove('cine'); }, 3800);
+  }
 }
-
-/* ── clock ───────────────────────────────────────────────────────── */
-const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-function tickClock(){
-  const d = new Date();
-  document.getElementById('clock').textContent =
-    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  document.getElementById('date').textContent =
-    `${DAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-}
-tickClock();
-setInterval(tickClock, 5000);
 
 /* ── search + anonymous view ─────────────────────────────────────── */
 const engineSel = document.getElementById('engine');
@@ -505,6 +559,9 @@ let fpsAcc = 0, fpsN = 0, fpsT = 0, ripCur = 0;
 function frame(){
   if (!glOK) return;          // WebGL/shader unavailable → CSS backdrop is showing instead
   requestAnimationFrame(frame);
+  /* the hero is only ~1 screen tall; once scrolled into the opaque article the
+     hole is fully covered, so stop rendering to save the GPU while reading */
+  if (scrollY > innerHeight * 1.15){ clock.getDelta(); return; }
   const dt = Math.min(clock.getDelta(), 0.05);
   U.uTime.value += dt;
 
