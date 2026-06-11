@@ -406,33 +406,39 @@ let proxyBase = localStorage.getItem('gargantua-proxy') || '';
 const anonBtn = document.getElementById('anon');
 function syncAnon(){ anonBtn.classList.toggle('on', anon); }
 syncAnon();
+/* The 👁 can turn on with NO proxy: YouTube uses the local watch.html (Invidious,
+   zero server needed). A proxy is only needed for full-site browsing of other
+   blocked sites — we prompt for it then, not up front. */
 anonBtn.addEventListener('click', () => {
-  if (!proxyBase){ configureProxy(); if (!proxyBase) return; }
   anon = !anon; localStorage.setItem('gargantua-anon', anon ? '1' : '0'); syncAnon();
 });
 anonBtn.addEventListener('contextmenu', e => { e.preventDefault(); configureProxy(); });
 function configureProxy(){
   const v = prompt(
-    'Anonymous-view proxy URL (your deployed Scramjet+Wisp host, e.g. https://my-proxy.fly.dev).\n' +
-    'Leave blank to disable. See ~/gargantua-proxy to deploy your own.',
+    'Full-site proxy URL — your deployed gargantua-proxy on Render, e.g. https://study-portal.onrender.com.\n' +
+    'Only needed to browse non-YouTube blocked sites. Leave blank to skip (YouTube still works via watch.html).',
     proxyBase);
   if (v === null) return;
   proxyBase = v.trim().replace(/\/+$/, '');
   if (proxyBase && !/^https?:\/\//.test(proxyBase)) proxyBase = 'https://' + proxyBase;
   localStorage.setItem('gargantua-proxy', proxyBase);
-  if (!proxyBase){ anon = false; localStorage.setItem('gargantua-anon', '0'); syncAnon(); }
 }
 
 const ytId = u => (u.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([\w-]{11})/) || [])[1];
 function isUrl(s){ return /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) && !s.includes(' '); }
 
 function openTarget(url){
-  /* YouTube → reliable nocookie embed via the proxy's watch page (best-effort playback) */
   const vid = ytId(url);
-  if (anon && proxyBase && vid){ location.href = `${proxyBase}/watch.html?v=${vid}`; return; }
-  /* anonymous view → through the proxy */
+  /* YouTube → local watch.html (Invidious/nocookie, served from THIS site — no proxy/Render). */
+  if (anon && vid){ location.href = 'watch.html?v=' + vid; return; }
+  /* Other sites in anon mode → full-site proxy (needs the Render host). */
   if (anon && proxyBase){ location.href = `${proxyBase}/#${url}`; return; }
-  if (anon && !proxyBase){ configureProxy(); if (!(anon && proxyBase)) { location.href = url; return; } location.href = `${proxyBase}/#${url}`; return; }
+  if (anon && !proxyBase){
+    if (confirm('Browsing a non-YouTube site anonymously needs your proxy host (on Render). Set it now?')){
+      configureProxy();
+      if (proxyBase){ location.href = `${proxyBase}/#${url}`; return; }
+    }
+  }
   location.href = url;
 }
 

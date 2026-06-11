@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>watch · gargantua</title>
+<link rel="icon" href="data:," />
+<style>
+  :root{
+    --bg: #0a0a0c; --text: #e8e4dd; --muted: rgba(232,228,221,.45);
+    --faint: rgba(232,228,221,.22); --accent: #ffb35c;
+    --panel: rgba(16,15,18,.82); --border: rgba(232,228,221,.12);
+    --ease: cubic-bezier(.16,1,.3,1);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  /* lightweight accretion-glow backdrop (no WebGL — keeps the player snappy) */
+  body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(closest-side at 50% 46%, transparent 0 16%,
+        rgba(255,179,92,.16) 17% 23%, rgba(255,140,70,.05) 30%, transparent 52%),
+      radial-gradient(closest-side at 50% 46%, #000 0 15%, transparent 16%); }
+  .label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; line-height: 1.6; }
+  .dim { color: var(--muted); }
+
+  #stage { position: fixed; inset: 0; z-index: 1; display: flex; flex-direction: column; }
+  #player { flex: 1; position: relative; }
+  #embed { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: #000; }
+  #embed.show { display: block; }
+
+  /* source switcher — styled like the Gargantua dock */
+  #bar { z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--border);
+    backdrop-filter: blur(14px); }
+  #bar .label { margin-right: 4px; }
+  .src { padding: 9px 14px; border: 1px solid var(--border); background: rgba(0,0,0,.35);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font: 600 11px/1 "Helvetica Neue", sans-serif; letter-spacing: .12em; text-transform: uppercase;
+    transition: all .15s var(--ease); }
+  .src:hover { color: var(--text); border-color: var(--muted); }
+  .src.on { color: var(--accent); border-color: var(--accent); background: rgba(255,179,92,.12); }
+  .src.add { border-style: dashed; color: var(--faint); }
+  #title { flex: 1; min-width: 0; color: var(--faint); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* landing / no-id state */
+  #land { position: fixed; inset: 0; z-index: 3; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+  #land h1 { font-size: clamp(28px, 6vw, 56px); font-weight: 200; letter-spacing: .04em; }
+  #land p { color: var(--muted); line-height: 1.6; max-width: 44ch; font-size: 14px; }
+  form { display: flex; gap: 8px; width: min(520px, 92vw); }
+  input { flex: 1; background: rgba(0,0,0,.4); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 14px 16px; font-size: 15px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  button.go { background: var(--accent); color: #1a1208; border: 0; border-radius: 10px;
+    padding: 0 22px; font-weight: 700; cursor: pointer; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="stage" class="hide">
+  <div id="player">
+    <iframe id="embed" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+  <div id="bar">
+    <span class="label dim">Source</span>
+    <span id="srcRow"></span>
+    <span id="title"></span>
+  </div>
+</div>
+
+<div id="land">
+  <div class="label dim">Gargantua · watch</div>
+  <h1>Watch</h1>
+  <p>Paste a YouTube link or ID. The video streams through an alternate frontend, so your network sees that domain — not YouTube. If one source is blocked, tap another below the player.</p>
+  <form id="f">
+    <input id="in" type="text" placeholder="https://youtube.com/watch?v=… or video ID" autocomplete="off" spellcheck="false" />
+    <button class="go" type="submit">Play</button>
+  </form>
+</div>
+
+<script>
+"use strict";
+
+/* Sources that serve the video through THEIR own domain (watchkin-style).
+   Whichever your filter allows will play; the page remembers your last working pick.
+   {id} is replaced with the 11-char video id. */
+const SOURCES = [
+  { key: "nocookie", name: "YT-nocookie", tpl: "https://www.youtube-nocookie.com/embed/{id}?autoplay=1&rel=0" },
+  { key: "yewtu",    name: "Invidious",   tpl: "https://yewtu.be/embed/{id}?autoplay=1" },
+  { key: "nadeko",   name: "Invidious 2", tpl: "https://inv.nadeko.net/embed/{id}?autoplay=1" },
+  { key: "nerdvpn",  name: "Invidious 3", tpl: "https://invidious.nerdvpn.de/embed/{id}?autoplay=1" },
+];
+
+function extractId(raw){
+  if (!raw) return null;
+  raw = raw.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  let url;
+  try { url = new URL(raw); } catch (_) { try { url = new URL("https://" + raw); } catch (_) { return null; } }
+  const host = url.hostname.replace(/^www\./, "");
+  if (host === "youtu.be"){ const id = url.pathname.slice(1).split("/")[0]; return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null; }
+  if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")){
+    const v = url.searchParams.get("v");
+    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+    const m = url.pathname.match(/\/(embed|shorts|v|live)\/([a-zA-Z0-9_-]{11})/);
+    if (m) return m[2];
+  }
+  return null;
+}
+// --- ephemeral address masking ---
+// Replace the visible address with a random number; keep the real video id only
+// in sessionStorage (wiped on tab close, never persisted to disk).
+const MASK_KEY = "gv-mask-watch";
+function maskMap(){ try { return JSON.parse(sessionStorage.getItem(MASK_KEY) || "{}"); } catch (_) { return {}; } }
+function randToken(){
+  const a = new Uint32Array(2); crypto.getRandomValues(a);
+  return (a[0].toString() + a[1].toString()).replace(/\D/g, "").slice(0, 11).padStart(9, "0");
+}
+function maskAs(id){
+  const m = maskMap(); const tok = randToken(); m[tok] = id;
+  try { sessionStorage.setItem(MASK_KEY, JSON.stringify(m)); } catch (_) {}
+  history.replaceState(null, "", location.pathname + "#" + tok);
+}
+function targetRaw(){
+  if (location.hash && location.hash.length > 1){
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (/^\d{6,}$/.test(h)){ return maskMap()[h] || null; }   // resolve a mask token
+    return h;
+  }
+  const v = new URLSearchParams(location.search).get("v");
+  return v || null;
+}
+
+const embed = document.getElementById("embed");
+const stage = document.getElementById("stage");
+const land  = document.getElementById("land");
+const srcRow = document.getElementById("srcRow");
+const titleEl = document.getElementById("title");
+
+let allSources = SOURCES.slice();
+let custom = null;
+try { custom = JSON.parse(localStorage.getItem("gargantua-watch-custom") || "null"); } catch (_) {}
+if (custom) allSources.push(custom);
+
+let curId = null;
+let curKey = null;
+let auto = true;        // auto-detect & swap on by default
+let loadTimer = null;
+let runToken = 0;       // cancels a stale auto-detect run when the user acts
+
+const originOf = (tpl) => { try { return new URL(tpl.replace("{id}", "x")).origin; } catch (_) { return null; } };
+
+// Reachability probe: a no-cors fetch resolves if the domain answers and rejects
+// (TypeError) on DNS / connection-reset blocks — how most web filters drop a domain.
+// Can't see a 200 "block page" (cross-origin) — the iframe-load check below covers
+// the cases it can, and the user can always tap another source.
+function reachable(src, timeout = 3000){
+  const origin = originOf(src.tpl);
+  if (!origin) return Promise.resolve(false);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeout);
+  return fetch(origin + "/favicon.ico?_=" + Date.now(),
+    { mode: "no-cors", signal: ctrl.signal, cache: "no-store" })
+    .then(() => true).catch(() => false).finally(() => clearTimeout(t));
+}
+
+function setNote(note){ titleEl.textContent = (curId ? "id " + curId + " · " : "") + note; }
+
+// Mount a source's embed; resolve true if it actually fires 'load' in the window.
+function mountAndConfirm(src, timeout = 6000){
+  clearTimeout(loadTimer);
+  return new Promise(resolve => {
+    let settled = false;
+    const onLoad = () => { if (!settled){ settled = true; clearTimeout(loadTimer); embed.removeEventListener("load", onLoad); resolve(true); } };
+    embed.addEventListener("load", onLoad);
+    loadTimer = setTimeout(() => { if (!settled){ settled = true; embed.removeEventListener("load", onLoad); resolve(false); } }, timeout);
+    embed.src = src.tpl.replace("{id}", curId);
+    embed.classList.add("show");
+  });
+}
+
+// Candidate order: last-known-working source first, then the rest.
+function candidates(){
+  const last = localStorage.getItem("gargantua-watch-src");
+  const list = allSources.slice();
+  if (last){ const i = list.findIndex(s => s.key === last); if (i > 0) list.unshift(list.splice(i, 1)[0]); }
+  return list;
+}
+
+// Auto: walk candidates, probe each, mount the first reachable, verify it loads,
+// else advance. Stops if the user pins a source or starts a new video.
+async function autoDetect(){
+  auto = true;
+  const token = ++runToken;
+  renderSrc();
+  for (const src of candidates()){
+    if (token !== runToken) return;
+    curKey = src.key; renderSrc();
+    setNote("probing " + src.name + "…");
+    if (!(await reachable(src))) continue;
+    if (token !== runToken) return;
+    setNote("loading via " + src.name + "…");
+    const ok = await mountAndConfirm(src);
+    if (token !== runToken) return;
+    if (ok){
+      localStorage.setItem("gargantua-watch-src", src.key);
+      setNote("via " + src.name + " · auto");
+      autoSettled = true;
+      return;
+    }
+  }
+  autoSettled = false;
+  setNote("every source looks blocked — fetching fresh ones / tap + custom (e.g. watchkin)");
+}
+
+// Pull the LIVE list of public Invidious instances so dead/blocked ones are
+// replaced automatically over time. Best-effort: if the API is unreachable
+// (offline or itself blocked), we silently keep the built-in fallback list.
+let autoSettled = false;
+async function loadLiveInstances(){
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4500);
+    const res = await fetch("https://api.invidious.io/instances.json?sort_by=type,users", { signal: ctrl.signal });
+    clearTimeout(t);
+    const data = await res.json();
+    const live = data
+      .filter(([, d]) => d && d.type === "https" && d.api !== false && d.uri)
+      .slice(0, 6)
+      .map(([, d], i) => ({ key: "inv" + i, name: "Invidious " + (i + 1),
+        tpl: d.uri.replace(/\/+$/, "") + "/embed/{id}?autoplay=1" }));
+    if (!live.length) return;
+    allSources = [SOURCES[0]].concat(live);          // keep YT-nocookie first
+    if (custom) allSources.push(custom);
+    renderSrc();
+    if (auto && !autoSettled && curId) autoDetect();  // retry with the fresh list
+  } catch (_) { /* keep the built-in instances */ }
+}
+
+// Manual pin: user chose a source — load it and stop auto-swapping.
+function pin(src){
+  auto = false; ++runToken; clearTimeout(loadTimer);
+  curKey = src.key;
+  localStorage.setItem("gargantua-watch-src", src.key);
+  embed.src = src.tpl.replace("{id}", curId);
+  embed.classList.add("show");
+  setNote("via " + src.name);
+  renderSrc();
+}
+
+function renderSrc(){
+  srcRow.innerHTML = "";
+  const autoBtn = document.createElement("span");
+  autoBtn.className = "src" + (auto ? " on" : "");
+  autoBtn.textContent = "⟳ Auto";
+  autoBtn.onclick = () => autoDetect();
+  srcRow.appendChild(autoBtn);
+
+  allSources.forEach(s => {
+    const b = document.createElement("span");
+    b.className = "src" + (!auto && s.key === curKey ? " on" : "");
+    b.textContent = s.name;
+    b.onclick = () => pin(s);
+    srcRow.appendChild(b);
+  });
+
+  const add = document.createElement("span");
+  add.className = "src add"; add.textContent = "+ custom";
+  add.onclick = () => {
+    const name = prompt("Source name (e.g. Watchkin):"); if (!name) return;
+    const tpl = prompt("Embed URL template — use {id} for the video id\n(e.g. https://www.watchkin.com/embed/{id} )"); if (!tpl || !tpl.includes("{id}")) return;
+    custom = { key: "custom", name: name.trim(), tpl: tpl.trim() };
+    localStorage.setItem("gargantua-watch-custom", JSON.stringify(custom));
+    allSources = SOURCES.concat([custom]);
+    pin(custom);
+  };
+  srcRow.appendChild(add);
+}
+
+function play(raw){
+  const id = extractId(raw);
+  if (!id) return false;
+  curId = id;
+  if (!/^\d{6,}$/.test(location.hash.slice(1))) maskAs(id);   // mask unless we arrived via a token
+  land.classList.add("hide");
+  stage.classList.remove("hide");
+  autoDetect();
+  return true;
+}
+
+document.getElementById("f").addEventListener("submit", e => { e.preventDefault(); play(document.getElementById("in").value); });
+
+loadLiveInstances();          // refresh the source list with live instances (best-effort)
+const t = targetRaw();
+if (t) play(t);
+</script>
+</body>
+</html>
